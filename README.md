@@ -1,2 +1,2 @@
-# paysafecash-woocommerce-v3
+# paysafecash-woocommerce-v2
 
