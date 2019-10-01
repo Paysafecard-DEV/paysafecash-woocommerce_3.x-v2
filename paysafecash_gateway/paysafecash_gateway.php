@@ -54,6 +54,7 @@ function paysafecash_init_gateway_class() {
 	class WC_Paysafecash_Gateway extends WC_Payment_Gateway {
 
 		public function __construct() {
+
 			$this->id                 = 'paysafecash';
 			$this->icon               = '';
 			$this->has_fields         = true;
@@ -92,6 +93,7 @@ function paysafecash_init_gateway_class() {
 			add_action( 'wp_enqueue_scripts', array( $this, 'payment_scripts' ) );
 
 			add_action( 'woocommerce_thankyou_paysafecash', array( $this, 'check_response' ) );
+			add_action( 'woocommerce_order_needs_payment', array( $this, 'check_response' ) );
 
 			add_filter( 'woocommerce_available_payment_gateways', 'paysafecash_country_restriction' );
 
@@ -221,8 +223,6 @@ function paysafecash_init_gateway_class() {
 				$customerhash = md5( $order->get_customer_id() );
 			}
 
-			exec( 'echo "' . print_r( $this->customer_data_takeover, true ) . '" >> /var/www/vhosts/hosting-core.de/temp/wp.log' );
-
 			if ( $this->customer_data_takeover == "yes" ) {
 				$customer_data = [ "first_name"   => $order->get_billing_first_name(),
 				                   "last_name"    => $order->get_billing_last_name(),
@@ -238,8 +238,8 @@ function paysafecash_init_gateway_class() {
 
 
 			$response = $pscpayment->initiatePayment( $order->get_total(), $order->get_currency(), $customerhash, $order->get_customer_ip_address(), $success_url, $failure_url, $notification_url, $customer_data, $this->time_limit, $correlation_id = "", $country_restriction = "", $kyc_restriction = "", $min_age = "", $shop_id = "Woocommerce: " . $woocommerce->version . " | " . $this->version, $this->submerchant_id );
-			exec( 'echo "' . print_r( $pscpayment->getRequest(), true ) . '" >> /var/www/vhosts/hosting-core.de/temp/wp.log' );
 			if ( isset( $response["object"] ) ) {
+				$order->add_order_note( sprintf( __( '%s Transaction ID: %s', 'paysafecash' ), $this->title, $response["id"] ) );
 				return array(
 					'result'   => 'success',
 					'redirect' => $response["redirect"]['auth_url']
@@ -292,9 +292,6 @@ function paysafecash_init_gateway_class() {
 
 			$response = $pscpayment->captureRefund( $payment_id, $amount, $currency, $customerhash, $order->get_billing_email(), "", $this->submerchant_id, "Woocommerce: " . $woocommerce->version . " | " . $this->version );
 
-			//exec("echo >> /var/www/vhosts/hosting-core.de/temp/refund.txt ".print_r($response, true));
-			file_put_contents( '/var/www/vhosts/hosting-core.de/temp/refund.txt', print_r( json_encode( $pscpayment->getRequest() ), true ) );
-
 			if ( $response == false || isset( $response['number'] ) ) {
 				$error = new WP_Error();
 				$error->add( $response['number'], $response['message'] );
@@ -317,17 +314,26 @@ function paysafecash_init_gateway_class() {
 
 		public function check_response() {
 			global $woocommerce;
+			global $wp;
 
 			if ( isset( $_GET['paysafecash'] ) ) {
 
 				$payment_id = $_GET['payment_id'];
-				$order_id   = $_GET['key'];
+				$order_id   = $wp->query_vars['order-pay'];
+				$order      = new WC_Order( $order_id );
 
 				$order = wc_get_order( $order_id );
 
 
 				if ( $order_id == 0 || $order_id == '' ) {
 					return;
+				}
+
+				if ( $_GET["failed"] ) {
+					echo "Bezahlung abgebrochen";
+					$order = new WC_Order( $order_id );
+					//$order->update_status( 'cancelled', sprintf( __( '%s payment cancelled! Transaction ID: %d', 'paysafecash' ), $this->title, $payment_id ) );
+					$order->add_order_note( sprintf( __( '%s Paysafecash payment cancelled! Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 				}
 
 				if ( $this->testmode ) {
@@ -353,7 +359,7 @@ function paysafecash_init_gateway_class() {
 					if ( $response["status"] == "SUCCESS" ) {
 						$order->payment_complete( $payment_id );
 
-						$order->add_order_note( sprintf( __( '%s payment approved! Trnsaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
+						$order->add_order_note( sprintf( __( '%s Paysafecash Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 
 						$woocommerce->cart->empty_cart();
 
@@ -370,65 +376,10 @@ function paysafecash_init_gateway_class() {
 					}
 				}
 
-				if ( $_GET["failed"] ) {
-					$order = new WC_Order( $order_id );
-					$order->update_status( 'cancelled', sprintf( __( '%s payment cancelled! Transaction ID: %d', 'paysafecash' ), $this->title, $payment_id ) );
-				}
+
 
 			}
 		}
-
-
-		function test_button_menu() {
-			add_menu_page( 'Test Button Page', 'Test Button', 'manage_options', 'test-button-slug', 'test_button_admin_page' );
-		}
-
-		function test_button_admin_page() {
-			if ( ! current_user_can( 'manage_options' ) ) {
-				wp_die( __( 'You do not have sufficient pilchards to access this page.' ) );
-			}
-
-
-			echo '<div class="wrap">';
-
-			echo '<h2>Test Button Demo</h2>';
-
-			// Check whether the button has been pressed AND also check the nonce
-			if ( isset( $_POST['test_button'] ) && check_admin_referer( 'test_button_clicked' ) ) {
-				// the button has been pressed AND we've passed the security check
-				test_button_action();
-			}
-
-			echo '<form action="options-general.php?page=test-button-slug" method="post">';
-
-			// this is a WordPress security feature - see: https://codex.wordpress.org/WordPress_Nonces
-			wp_nonce_field( 'test_button_clicked' );
-			echo '<input type="hidden" value="true" name="test_button" />';
-			submit_button( 'Call Function' );
-			echo '</form>';
-
-			echo '</div>';
-
-		}
-
-		function test_button_action() {
-			echo '<div id="message" class="updated fade"><p>'
-			     . 'The "Call Function" button was clicked.' . '</p></div>';
-
-			$path = WP_TEMP_DIR . '/test-button-log.txt';
-
-			$handle = fopen( $path, "w" );
-
-			if ( $handle == false ) {
-				echo '<p>Could not write the log file to the temporary directory: ' . $path . '</p>';
-			} else {
-				echo '<p>Log of button click written to: ' . $path . '</p>';
-
-				fwrite( $handle, "Call Function button clicked on: " . date( "D j M Y H:i:s", time() ) );
-				fclose( $handle );
-			}
-		}
-
 
 		public function payment_scripts() {
 
@@ -457,10 +408,6 @@ function paysafecash_init_gateway_class() {
 
 			$signature   = str_replace( '"', '', str_replace( 'signature="', '', explode( ",", apache_request_headers()["Authorization"] )[2] ) );
 			$payment_str = file_get_contents( "php://input" );
-
-			exec( 'echo "' . print_r( $payment_str, true ) . '" >> /var/www/vhosts/hosting-core.de/temp/wp.log' );
-			exec( 'echo "' . print_r( apache_request_headers(), true ) . '" >> /var/www/vhosts/hosting-core.de/temp/wp.log' );
-
 			$order_id   = $wp->query_vars['order-received'];
 			$order      = new WC_Order( $order_id );
 
@@ -477,12 +424,6 @@ function paysafecash_init_gateway_class() {
 			$pubkey         = openssl_pkey_get_public( file_get_contents( plugin_dir_path( __FILE__ ) . 'key/webhook.pem' ) );
 			$signatur_check = openssl_verify( $payment_str, base64_decode( $signature ), $pubkey, OPENSSL_ALGO_SHA256 );
 
-
-			exec( 'echo " SIGNATUR Check" >> /var/www/vhosts/hosting-core.de/temp/wp.log' );
-			exec( 'echo "' . print_r( plugin_dir_path( __FILE__ ) . 'key/webhook.pem', true ) . '" >> /var/www/vhosts/hosting-core.de/temp/wp.log' );
-			exec( 'echo "' . print_r( $pubkey, true ) . '" >> /var/www/vhosts/hosting-core.de/temp/wp.log' );
-			exec( 'echo "' . print_r( $signatur_check, true ) . '" >> /var/www/vhosts/hosting-core.de/temp/wp.log' );
-
 			openssl_free_key( $pubkey );
 
 			$payment_str = json_decode($payment_str);
@@ -491,7 +432,7 @@ function paysafecash_init_gateway_class() {
 
 			if ( $signatur_check == 1 ) {
 				if($payment_str->eventType == "PAYMENT_CAPTURED"){
-					$order->add_order_note( sprintf( __( '%s webhook OK! Trnsaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
+					$order->add_order_note( sprintf( __( '%s Paysafecash payment completed! Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 					$order->payment_complete( $payment_id );
 					$order->set_payment_method( "paysafecash" );
 					$order->add_payment_token( new WC_Payment_Token_CC( $payment_id ) );

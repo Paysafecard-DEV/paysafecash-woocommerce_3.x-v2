@@ -181,11 +181,9 @@ class PaysafecardCashController
 			$headers = [];
 		}
 
-		exec( 'echo "'.print_r($this->request, true). '" >> /var/www/vhosts/hosting-core.de/temp/wp.log');
-
 		$this->doRequest($jsonarray, "POST", $headers);
 		if ($this->requestIsOk() == true) {
-			exec( 'echo "'.print_r($this->response, true). '" >> /var/www/vhosts/hosting-core.de/temp/wp.log');
+
 			return $this->response;
 		} else {
 			return false;
@@ -260,10 +258,7 @@ class PaysafecardCashController
 			$headers = [];
 		}
 		$this->url = $this->url . $payment_id . "/refunds";
-		exec( 'echo "'.print_r($this->url, true). '" >> /var/www/vhosts/hosting-core.de/temp/wp.log');
-		exec( 'echo "'.print_r($jsonarray, true). '" >> /var/www/vhosts/hosting-core.de/temp/wp.log');
 		$this->doRequest($jsonarray, "POST", $headers);
-		exec( 'echo "'.print_r($this->response, true). '" >> /var/www/vhosts/hosting-core.de/temp/wp.log');
 		return $this->response;
 	}
 
