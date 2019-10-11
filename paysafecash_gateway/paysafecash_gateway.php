@@ -415,11 +415,8 @@ function paysafecash_init_gateway_class() {
 
 			$this->init_settings();
 
-			if(file_get_contents( plugin_dir_path( __FILE__ ) . 'key/webhook.pem' ) != $this->settings['webhook_key']){
-				file_put_contents( plugin_dir_path( __FILE__ ) . 'key/webhook.pem', "-----BEGIN PUBLIC KEY----- ". str_replace(' ', '', preg_replace( "/\r|\n/", "", $this->settings['webhook_key'])). " -----END PUBLIC KEY-----" );
-			}
-
-			$pubkey         = openssl_pkey_get_public( file_get_contents( plugin_dir_path( __FILE__ ) . 'key/webhook.pem' ) );
+			$private_key = "-----BEGIN PUBLIC KEY-----\n". str_replace(" ", "", $this->settings['webhook_key']). "\n-----END PUBLIC KEY-----";
+			$pubkey         = openssl_pkey_get_public( chunk_split($private_key, 64, "\n") );
 			$signatur_check = openssl_verify( $payment_str, base64_decode( $signature ), $pubkey, OPENSSL_ALGO_SHA256 );
 
 			openssl_free_key( $pubkey );
@@ -444,5 +441,7 @@ function paysafecash_init_gateway_class() {
 				$order->add_order_note( sprintf( __( '%s webhook failed! Trnsaction ID: %s' . openssl_error_string(), 'paysafecash' ), $this->title, $payment_id ) );
 			}
 		}
+
+
 	}
 }
