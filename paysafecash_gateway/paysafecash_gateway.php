@@ -54,14 +54,13 @@ function paysafecash_init_gateway_class() {
 	class WC_Paysafecash_Gateway extends WC_Payment_Gateway {
 
 		public function __construct() {
-
 			$this->id                 = 'paysafecash';
 			$this->icon               = '';
 			$this->has_fields         = true;
 			$this->method_title       = 'Paysafecash';
 			$this->method_description = __( 'PAY WITH CASH: Generate a barcode and go to a <a href="https://www.paysafecash.com/pos" target="blank">payment point near you</a> to complete the payment.', 'paysafecash' );
 			$this->description        = $this->method_description;
-			$this->version            = "1.0.6";
+			$this->version            = "1.0.7";
 			$this->supports           = array(
 				'products',
 				'refunds'
@@ -184,7 +183,7 @@ function paysafecash_init_gateway_class() {
 					$this->description .= ' TEST MODE ENABLED';
 					$this->description = trim( $this->description );
 				}
-				echo wpautop( wp_kses_post( '<p><img  src="' . plugins_url( 'img/paysafecash.png', __FILE__ ) . '" ></p><br><p>' . $this->description."</p>" ) );
+				echo wpautop( wp_kses_post( $this->description) );
 			}
 		}
 
@@ -319,7 +318,11 @@ function paysafecash_init_gateway_class() {
 			if ( isset( $_GET['paysafecash'] ) ) {
 
 				$payment_id = $_GET['payment_id'];
-				$order_id   = $wp->query_vars['order-pay'];
+				if(isset($wp->query_vars['order-pay'])){
+					$order_id   = $wp->query_vars['order-pay'];
+				}else{
+					$order_id   = $wp->query_vars['order-received'];
+				}
 				$order      = new WC_Order( $order_id );
 
 				$order = wc_get_order( $order_id );
@@ -329,11 +332,11 @@ function paysafecash_init_gateway_class() {
 					return;
 				}
 
-				if ( $_GET["failed"] ) {
+				if ( isset($_GET["failed"]) ) {
 					echo "Bezahlung abgebrochen";
 					$order = new WC_Order( $order_id );
 					//$order->update_status( 'cancelled', sprintf( __( '%s payment cancelled! Transaction ID: %d', 'paysafecash' ), $this->title, $payment_id ) );
-					$order->add_order_note( sprintf( __( '%s Paysafecash payment cancelled! Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
+					$order->add_order_note( sprintf( __( '%s payment cancelled! Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 				}
 
 				if ( $this->testmode ) {
@@ -358,8 +361,6 @@ function paysafecash_init_gateway_class() {
 				} else if ( isset( $response["object"] ) ) {
 					if ( $response["status"] == "SUCCESS" ) {
 						$order->payment_complete( $payment_id );
-
-						$order->add_order_note( sprintf( __( '%s Paysafecash Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 
 						$woocommerce->cart->empty_cart();
 
@@ -432,7 +433,7 @@ function paysafecash_init_gateway_class() {
 
 			if ( $signatur_check == 1 ) {
 				if($payment_str->eventType == "PAYMENT_CAPTURED"){
-					$order->add_order_note( sprintf( __( '%s Paysafecash payment completed! Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
+					$order->add_order_note( sprintf( __( '%s payment completed! Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 					$order->payment_complete( $payment_id );
 					$order->set_payment_method( "paysafecash" );
 					$order->add_payment_token( new WC_Payment_Token_CC( $payment_id ) );
