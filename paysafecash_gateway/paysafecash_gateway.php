@@ -6,7 +6,7 @@
  * Author: Paysafecash
  * Text Domain: paysafecash
  * Author URI: https://www.paysafecash.com/en/
- * Version: 1.0.6
+ * Version: 1.0.8
  *
 */
 include( plugin_dir_path( __FILE__ ) . 'libs/PaymentClass.php' );
@@ -60,7 +60,7 @@ function paysafecash_init_gateway_class() {
 			$this->method_title       = 'Paysafecash';
 			$this->method_description = __( 'PAY WITH CASH: Generate a barcode and go to a <a href="https://www.paysafecash.com/pos" target="blank">payment point near you</a> to complete the payment.', 'paysafecash' );
 			$this->description        = $this->method_description;
-			$this->version            = "1.0.7";
+			$this->version            = "1.0.8";
 			$this->supports           = array(
 				'products',
 				'refunds'
@@ -78,7 +78,6 @@ function paysafecash_init_gateway_class() {
 			$this->variable_timeout       = $this->get_option( 'variable_timeout' );
 
 			$this->ressources_url = "http://";
-
 
 			add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array(
 				$this,
@@ -126,6 +125,11 @@ function paysafecash_init_gateway_class() {
 					'description' => __( 'This key is provided by the paysafecash support team. There is one key for the test- and one for production environment.', 'paysafecash' ),
 					'type'        => 'password'
 				),
+				'webhook_key'            => array(
+					'title'       => 'Webhook RSA Key',
+					'description' => __( 'This key is provided by the paysafecash support team. There is one key for the test- and one for production environment.', 'paysafecash' ),
+					'type'        => 'textfield'
+				),
 				'submerchant_id'         => array(
 					'title'       => 'Submerchant ID',
 					'description' => __( 'This field specifies the used Reporting Criteria. You can use this parameter to distinguish your transactions per brand/URL. Use this field only if agreed beforehand with the paysafecash support team. The value has to be configured in both systems.', 'paysafecash' ),
@@ -162,7 +166,6 @@ function paysafecash_init_gateway_class() {
 
 			echo '<h3>' . __( 'Paysafecash', 'paysafecash' ) . '</h3>';
 			echo '<p>' . __( 'Paysafecash is a cash payment option. Generate a QR/barcode and pay at a nearby shop. More information and our payment points can be found at <a href=\"https://www.paysafecash.com\" target=\"_blank\">www.paysafecash.com</a>', 'paysafecash' ) . '</p>';
-			echo '<p>' . __( '<a href="' . plugins_url( 'Installation_guidelines_wooCommerce_EN.pdf', __FILE__ ) . '">Here</a> you can find the Installation instructions', 'paysafecash' ) . '</a><br>';
 			echo '<span>The Installation is ok!</span><br>';
 			echo '<span>Current Version: ' . $this->version . ' (no update needed)</span>';
 			echo '<table class="form-table">';
@@ -183,10 +186,9 @@ function paysafecash_init_gateway_class() {
 					$this->description .= ' TEST MODE ENABLED';
 					$this->description = trim( $this->description );
 				}
-				echo wpautop( wp_kses_post( $this->description) );
+				echo wpautop( wp_kses_post( $this->description ) );
 			}
 		}
-
 
 		public function process_payment( $order_id ) {
 			global $woocommerce;
@@ -223,22 +225,23 @@ function paysafecash_init_gateway_class() {
 			}
 
 			if ( $this->customer_data_takeover == "yes" ) {
-				$customer_data = [ "first_name"   => $order->get_billing_first_name(),
-				                   "last_name"    => $order->get_billing_last_name(),
-				                   "address1"     => $order->get_billing_address_1(),
-				                   "postcode"     => $order->get_billing_postcode(),
-				                   "city"         => $order->get_billing_city(),
-				                   "phone_number" => $order->get_billing_phone(),
-				                   "email"        => $order->get_billing_email()
+				$customer_data = [
+					"first_name"   => $order->get_billing_first_name(),
+					"last_name"    => $order->get_billing_last_name(),
+					"address1"     => $order->get_billing_address_1(),
+					"postcode"     => $order->get_billing_postcode(),
+					"city"         => $order->get_billing_city(),
+					"phone_number" => $order->get_billing_phone(),
+					"email"        => $order->get_billing_email()
 				];
 			} else {
 				$customer_data = array();
 			}
 
-
 			$response = $pscpayment->initiatePayment( $order->get_total(), $order->get_currency(), $customerhash, $order->get_customer_ip_address(), $success_url, $failure_url, $notification_url, $customer_data, $this->time_limit, $correlation_id = "", $country_restriction = "", $kyc_restriction = "", $min_age = "", $shop_id = "Woocommerce: " . $woocommerce->version . " | " . $this->version, $this->submerchant_id );
 			if ( isset( $response["object"] ) ) {
 				$order->add_order_note( sprintf( __( '%s Transaction ID: %s', 'paysafecash' ), $this->title, $response["id"] ) );
+
 				return array(
 					'result'   => 'success',
 					'redirect' => $response["redirect"]['auth_url']
@@ -318,21 +321,18 @@ function paysafecash_init_gateway_class() {
 			if ( isset( $_GET['paysafecash'] ) ) {
 
 				$payment_id = $_GET['payment_id'];
-				if(isset($wp->query_vars['order-pay'])){
-					$order_id   = $wp->query_vars['order-pay'];
-				}else{
-					$order_id   = $wp->query_vars['order-received'];
+				if ( isset( $wp->query_vars['order-pay'] ) ) {
+					$order_id = $wp->query_vars['order-pay'];
+				} else {
+					$order_id = $wp->query_vars['order-received'];
 				}
-				$order      = new WC_Order( $order_id );
-
 				$order = wc_get_order( $order_id );
-
 
 				if ( $order_id == 0 || $order_id == '' ) {
 					return;
 				}
 
-				if ( isset($_GET["failed"]) ) {
+				if ( isset( $_GET["failed"] ) ) {
 					echo "Bezahlung abgebrochen";
 					$order = new WC_Order( $order_id );
 					//$order->update_status( 'cancelled', sprintf( __( '%s payment cancelled! Transaction ID: %d', 'paysafecash' ), $this->title, $payment_id ) );
@@ -378,16 +378,13 @@ function paysafecash_init_gateway_class() {
 				}
 
 
-
 			}
 		}
 
 		public function payment_scripts() {
-
 		}
 
 		public function validate_fields() {
-
 		}
 
 		public function callback_handler() {
@@ -409,17 +406,17 @@ function paysafecash_init_gateway_class() {
 
 			$signature   = str_replace( '"', '', str_replace( 'signature="', '', explode( ",", apache_request_headers()["Authorization"] )[2] ) );
 			$payment_str = file_get_contents( "php://input" );
-			$order_id   = $wp->query_vars['order-received'];
-			$order      = new WC_Order( $order_id );
+			$order_id    = $wp->query_vars['order-received'];
+			$order       = new WC_Order( $order_id );
+
+			if ( empty( apache_request_headers()["Authorization"] ) ) {
+				$order->add_order_note( sprintf( __( '%s plugin error. Auth header is missing!', 'paysafecash' ), $this->title ) );
+			}
 
 			$this->init_settings();
-			$this->api_key        = $this->settings['api_key'];
-			$this->submerchant_id = $this->settings['submerchant_id'];
 
-			if ( $this->testmode ) {
-				$env = "TEST";
-			} else {
-				$env = "PRODUCTION";
+			if(file_get_contents( plugin_dir_path( __FILE__ ) . 'key/webhook.pem' ) != $this->settings['webhook_key']){
+				file_put_contents( plugin_dir_path( __FILE__ ) . 'key/webhook.pem', "-----BEGIN PUBLIC KEY----- ". str_replace(' ', '', preg_replace( "/\r|\n/", "", $this->settings['webhook_key'])). " -----END PUBLIC KEY-----" );
 			}
 
 			$pubkey         = openssl_pkey_get_public( file_get_contents( plugin_dir_path( __FILE__ ) . 'key/webhook.pem' ) );
@@ -427,19 +424,18 @@ function paysafecash_init_gateway_class() {
 
 			openssl_free_key( $pubkey );
 
-			$payment_str = json_decode($payment_str);
-			$payment_id = $payment_str->data->mtid;
+			$payment_str = json_decode( $payment_str );
+			$payment_id  = $payment_str->data->mtid;
 
 
 			if ( $signatur_check == 1 ) {
-				if($payment_str->eventType == "PAYMENT_CAPTURED"){
+				if ( $payment_str->eventType == "PAYMENT_CAPTURED" ) {
 					$order->add_order_note( sprintf( __( '%s payment completed! Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 					$order->payment_complete( $payment_id );
 					$order->set_payment_method( "paysafecash" );
 					$order->add_payment_token( new WC_Payment_Token_CC( $payment_id ) );
-					$order->add_order_note( sprintf( __( '%s payment approved! Trnsaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 					$order->set_status( 'pending', 'Payment Approved.' );
-				}elseif ($payment_str->eventType == "PAYMENT_CAPTURED"){
+				} elseif ( $payment_str->eventType == "PAYMENT_CAPTURED" ) {
 					$order->add_order_note( sprintf( __( '%s Order was canceled by Customer ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 				}
 			} elseif ( $signatur_check == 0 ) {
