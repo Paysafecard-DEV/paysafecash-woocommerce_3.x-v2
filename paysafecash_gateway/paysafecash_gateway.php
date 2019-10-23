@@ -9,7 +9,10 @@
  * Version: 1.0.8
  *
 */
+use phpseclib\Crypt\RSA;
+
 include( plugin_dir_path( __FILE__ ) . 'libs/PaymentClass.php' );
+include( plugin_dir_path( __FILE__ ) . 'vendor/autoload.php' );
 
 
 if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', get_option( 'active_plugins' ) ) ) ) {
@@ -128,7 +131,7 @@ function paysafecash_init_gateway_class() {
 				'webhook_key'            => array(
 					'title'       => 'Webhook RSA Key',
 					'description' => __( 'This key is provided by the paysafecash support team. There is one key for the test- and one for production environment.', 'paysafecash' ),
-					'type'        => 'textfield'
+					'type'        => 'password'
 				),
 				'submerchant_id'         => array(
 					'title'       => 'Submerchant ID',
@@ -171,6 +174,10 @@ function paysafecash_init_gateway_class() {
 			echo '<table class="form-table">';
 			$this->generate_settings_html();
 			echo '</table>';
+
+
+
+
 
 			echo '<style> #woocommerce_paysafecash_country{ min-height: 150px}</style>';
 
@@ -215,6 +222,7 @@ function paysafecash_init_gateway_class() {
 			$success_url      = $order->get_checkout_order_received_url() . "&paysafecash=true&success=true&order_id=" . $order->get_order_number() . "&payment_id={payment_id}";
 			$failure_url      = $order->get_checkout_payment_url() . "&paysafecash=false&failed=true&payment_id={payment_id}";
 			$notification_url = $this->get_return_url( $order ) . "&wc-api=wc_paysafecash_gateway";
+
 
 			$customerhash = "";
 
@@ -323,6 +331,9 @@ function paysafecash_init_gateway_class() {
 				$payment_id = $_GET['payment_id'];
 				if ( isset( $wp->query_vars['order-pay'] ) ) {
 					$order_id = $wp->query_vars['order-pay'];
+					if(isset($_GET['failed'])){
+						echo "<h4>". __("Payment was canceled by Customer")."</h4>";
+					}
 				} else {
 					$order_id = $wp->query_vars['order-received'];
 				}
@@ -333,10 +344,12 @@ function paysafecash_init_gateway_class() {
 				}
 
 				if ( isset( $_GET["failed"] ) ) {
-					echo "Bezahlung abgebrochen";
 					$order = new WC_Order( $order_id );
-					//$order->update_status( 'cancelled', sprintf( __( '%s payment cancelled! Transaction ID: %d', 'paysafecash' ), $this->title, $payment_id ) );
-					$order->add_order_note( sprintf( __( '%s payment cancelled! Transaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
+					$order->update_status( 'cancelled', sprintf( __( '%s payment cancelled! Transaction ID: %d', 'paysafecash' ), $this->title, $payment_id ) );
+					return array(
+						'result'   => 'failed',
+						'redirect' => $order->get_cancel_order_url_raw()
+					);
 				}
 
 				if ( $this->testmode ) {
@@ -414,9 +427,9 @@ function paysafecash_init_gateway_class() {
 			}
 
 			$this->init_settings();
-
-			$private_key = "-----BEGIN PUBLIC KEY-----\n". str_replace(" ", "", $this->settings['webhook_key']). "\n-----END PUBLIC KEY-----";
-			$pubkey         = openssl_pkey_get_public( chunk_split($private_key, 64, "\n") );
+			$rsa = new RSA();
+			$rsa->loadKey("-----BEGIN RSA PUBLIC KEY-----\n". str_replace(" ", "", $this->settings['webhook_key']). "\n-----END RSA PUBLIC KEY-----");
+			$pubkey         = openssl_pkey_get_public( $rsa->getPublicKey() );
 			$signatur_check = openssl_verify( $payment_str, base64_decode( $signature ), $pubkey, OPENSSL_ALGO_SHA256 );
 
 			openssl_free_key( $pubkey );
@@ -436,9 +449,9 @@ function paysafecash_init_gateway_class() {
 					$order->add_order_note( sprintf( __( '%s Order was canceled by Customer ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
 				}
 			} elseif ( $signatur_check == 0 ) {
-				$order->add_order_note( sprintf( __( '%s webhook failed! Trnsaction ID: %s', 'paysafecash' ), $this->title, $payment_id ) );
+				$order->add_order_note( sprintf( __( '%s webhook failed! Transaction ID: %s Please check your Merchant Service Center to see if the transaction was successful, and change the order status accordingly. If the webhook fails repeatedly, please contact paysafecard tech support: techsupport@paysafecard.com', 'paysafecash' ), $this->title, $payment_id ) );
 			} else {
-				$order->add_order_note( sprintf( __( '%s webhook failed! Trnsaction ID: %s' . openssl_error_string(), 'paysafecash' ), $this->title, $payment_id ) );
+				$order->add_order_note( sprintf( __( '%s webhook failed! Transaction ID: %s Please check your Merchant Service Center to see if the transaction was successful, and change the order status accordingly. If the webhook fails repeatedly, please contact paysafecard tech support: techsupport@paysafecard.com', 'paysafecash' ), $this->title, $payment_id ) );
 			}
 		}
 
