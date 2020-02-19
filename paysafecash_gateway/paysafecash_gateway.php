@@ -6,7 +6,7 @@
  * Author: Paysafecash
  * Text Domain: paysafecash
  * Author URI: https://www.paysafecash.com/en/
- * Version: 1.0.8
+ * Version: 1.0.9
  *
 */
 use phpseclib\Crypt\RSA;
@@ -63,7 +63,7 @@ function paysafecash_init_gateway_class() {
 			$this->method_title       = 'Paysafecash';
 			$this->method_description = __( 'PAY WITH CASH: Generate a barcode and go to a <a href="https://www.paysafecash.com/pos" target="blank">payment point near you</a> to complete the payment.', 'paysafecash' );
 			$this->description        = $this->method_description;
-			$this->version            = "1.0.8";
+			$this->version            = "1.0.9";
 			$this->supports           = array(
 				'products',
 				'refunds'
@@ -223,14 +223,7 @@ function paysafecash_init_gateway_class() {
 			$failure_url      = $order->get_checkout_payment_url() . "&paysafecash=false&failed=true&payment_id={payment_id}";
 			$notification_url = $this->get_return_url( $order ) . "&wc-api=wc_paysafecash_gateway";
 
-
-			$customerhash = "";
-
-			if ( empty( $order->get_customer_id() ) ) {
-				$customerhash = md5( $order->get_billing_email() );
-			} else {
-				$customerhash = md5( $order->get_customer_id() );
-			}
+			$customerhash = md5( $order->get_billing_email() );
 
 			if ( $this->customer_data_takeover == "yes" ) {
 				$customer_data = [
