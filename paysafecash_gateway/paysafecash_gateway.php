@@ -182,7 +182,7 @@ function paysafecash_init_gateway_class() {
 					$this->description .= ' TEST MODE ENABLED';
 					$this->description = trim( $this->description );
 				}
-				echo   '<div style="float:left"><img  src="' . plugins_url( 'img/paysafecash.png', __FILE__ ) . '" ></div><br /><br /><div>' . $this->description."</div>" ;
+				echo $this->description;
 			}
 		}
 
